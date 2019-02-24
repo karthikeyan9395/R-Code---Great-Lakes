@@ -1,0 +1,111 @@
+setwd("D:/GreatLakes/Group Assignment 2/Dimension reduction")
+cereal <- read.csv("cereal.csv")
+
+##### DATA CLEANING ##### 
+#START
+  View(cereal)
+  tail(cereal)
+  str(cereal)
+  summary(cereal)
+  
+  ### Checking which rows are having value as 6
+  ### https://stats.stackexchange.com/questions/6187/filtering-a-dataframe ##
+  six <- apply(cereal[,],1,function(row) "6" %in% row)
+  temp <- cereal[six,]
+  View(temp)
+  x <- row.names(temp)
+  temp[,which(temp %in% 6)] <- 5  ## Testing
+  ### One row fetched (15)
+  
+  #Replacing all 6 to 5
+  cereal[cereal == 6] <- 5
+  
+  ### Changing all the negative values into positive.
+  ### Since only 2 columns 12 and 25 are negative columns we are populating it with pos val
+  cereal[,c(12,25)] <- 6 - cereal[,c(12,25)]
+#END
+##### DATA CLEANING ##### 
+  
+  
+### FACTOR ANALYSIS ###
+#START
+  
+  ### Co-relation check ###
+  cereal_matrix <- cereal[,2:26]
+  View(cereal_matrix)
+  library(corrplot)
+  corrplot(cor(cereal_matrix))
+  
+  #Checking feasibility of factor analysis
+  
+  ##KMO test for sampling adequacy
+  library(psych)
+  cereal_KMO <- KMO(cereal_matrix)
+  cereal_KMO  
+  #If the KMO values is between 0.8 and 1 indicate the sampling is adequate and 
+  #  factor analysis is useful
+  
+  ##Bartlett Test of Spehericity 
+  
+  cereal_Bartlett <- cortest.bartlett(cereal_matrix, n = nrow(cereal_matrix))
+  cereal_Bartlett  
+  # Since p value is less than 0.001 we can reject the null hypo of 
+  # variances are equal for all samples and continue with factor analysis
+  
+  
+  ## To find the number of factors
+  library(nFactors)
+  ev <- eigen(cor(cereal_matrix)) # get eigenvalues
+  ev
+  
+  nS <- nScree(x=ev$values)
+  nS
+  plotnScree(nS)
+  
+  ## nparallel and nkaiser comes as 5 factors. 
+
+  factor <- factanal(cereal_matrix,5,rotation = "none")
+  factor$loadings  
+  
+  factor
+  
+  factor <- factanal(cereal_matrix,4,rotation = "none", na.action = na.omit)
+  factor$loadings  
+  
+  factor
+  
+  #Test of the hypothesis that 4 factors are sufficient.
+  
+  factor_init <- fa(cereal_matrix,nfactors = 4,rotate = "none",fm="ml")
+  factor_init  
+  fa.diagram(factor_init,main="Structure Diagram")
+  
+  ### Factor analysis with rotation
+  fa_rot = factanal(cereal_matrix, factors = 5, rotation = "varimax")
+  fa_rot$loadings
+  factor_rot <- fa(cereal_matrix,nfactors = 4,rotate = "varimax",fm="ml")
+  print(factor_rot)
+  fa.diagram(factor_rot,main="Structure Diagram")  
+
+  
+  ###Factors Interpreted
+  
+  #Factor1 = Health 
+  ##Nutrious,Health,Fibre,Natural,Filling,Quality,Energy,Regular,Satisfying
+  
+  #Factor2 = Taste
+  ##Sugar,sweet,Salt,Calories,Process 
+  
+  #Factor3 = Family
+  ##Kids, Family,Economical,easy
+  
+  #Factor4 = Texture
+  ##Plain,Treat,Fun,Boring,Soggy,Crisp,Fruit    
+  
+#END
+### FACTOR ANALYSIS ###
+  
+  
+  
+  
+  

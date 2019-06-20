@@ -1,0 +1,128 @@
+library(methods)
+library(recommenderlab)
+library(data.table)
+library(ggplot2)
+library(knitr)
+library(Binarize)
+library(readxl)
+library(dplyr)
+library(caret)
+
+setwd("D:/GreatLakes/Capstone/Retail and marketting analytics/Recommendation System")
+df_data_orig <- read_xlsx("Capstone Dataset.xlsx",sheet = "Transaction")
+attach(df_data)
+df_data <- df_data_orig
+
+df_data_loyal <- df_data[`Customer Type`=="Loyal",]
+
+df_data_loyal$date <- as.Date(paste("18",df_data_loyal$Month,"01",sep="-"),"%y-%B-%d")
+df_data_loyal <- na.omit(df_data_loyal) #No records removed.
+
+df_data_loyal$Brand <- sapply(df_data_loyal$Brand, tolower)
+df_data_loyal$Product <- sapply(df_data_loyal$Product, tolower)
+
+df_data_loyal_train <- df_data_loyal[Month != "December"]
+df_data_loyal_test <- df_data_loyal[Month == "December",]
+
+df_data_loyal <- as.data.table(df_data_loyal)
+
+setkeyv(df_data_loyal, c('Product','Brand' ))
+itemCode <- unique(df_data_loyal[, c('Product','Brand')])
+setkeyv(df_data_loyal, NULL)
+
+df_train_ori <- dcast(df_data_loyal_train, Cust_ID ~ Product, 
+                      value.var = 'Quantity',
+                      fun.aggregate = sum)
+
+for (i in names(df_train_ori))
+  df_train_ori[is.na(get(i)), (i):=0]
+
+df_train_ori <- df_train_ori[,-1]
+
+df_train_matrix <- as.matrix(df_train_ori)
+
+df_train_binarize <- binarize(as(df_train_matrix, "realRatingMatrix"), minRatin = 1)
+df_train_binarize_view <- (as(df_train_binarize,"matrix"))
+
+recommender_models <- recommenderRegistry$get_entries(dataType ="realRatingMatrix")
+
+
+recommender_models$IBCF_realRatingMatrix$parameters
+recommender_models$UBCF_realRatingMatrix$parameters
+
+# recommender_models$IBCF_binaryRatingMatrix$parameters
+# recommender_models$UBCF_binaryRatingMatrix$parameters
+
+
+recc_model_IBCF <- Recommender(data = df_train_binarize,  
+                          method = 'IBCF', 
+                          parameter = 'Cosine')
+                          
+
+recc_model_UBCF <- Recommender(data = df_train_binarize, 
+                           method = 'UBCF', 
+                           parameter = 'cosine')
+
+print(recc_model_UBCF@model$data@data)
+
+recc_model_IBCF_view <- (as(recc_model_IBCF@model$sim,"matrix"))
+recc_model_UBCF_view <- (as(recc_model_UBCF@model$data@data,"matrix"))
+
+actual_prod_keyvalues <- rownames(recc_model_IBCF@model$sim)
+actual_prod_keyvalues1 <- rownames(recc_model_UBCF@model$data@data)
+
+
+# Prediction
+df_test_ori <- as.data.table(df_test_ori)
+
+df_test_ori <- dcast(df_data_loyal_test, Cust_ID ~ Product, 
+                      value.var = 'Quantity',
+                      fun.aggregate = sum)
+
+
+for (i in names(df_test_ori))
+  df_test_ori[is.na(get(i)), (i):=0]
+
+
+df_test_ori <- df_test_ori[,c(-1,-102)]
+
+df_test_matrix <- as.matrix(df_test_ori)
+
+df_test_binarize <- binarize(as(df_test_matrix, "realRatingMatrix"), minRatin = 1)
+df_test_binarize_view <- (as(df_test_binarize,"matrix"))
+
+
+recc_model_IBCF_predicted <-predict(object = recc_model_IBCF,
+                               newdata=df_test_binarize,
+                               n = 5, 
+                               type="topNList")
+
+recc_model_UBCF_predicted <-predict(object = recc_model_UBCF,
+                                 newdata=df_test_binarize,
+                                 n = 5, 
+                                 type="topNList")
+
+recc_model_IBCF_predicted_view <- (as(recc_model_IBCF_predicted,"list"))
+recc_model_UBCF_predicted_view <- (as(recc_model_UBCF_predicted,"list"))
+
+recommend_top_list_IBCF <-as(recc_model_IBCF_predicted,"list")
+View(recommend_top_list_IBCF)
+
+recommend_top_list_UBCF <-as(recc_model_UBCF_predicted,"list")
+View(recommend_top_list_UBCF)
+
+write.csv(recommend_top_list_IBCF,"Product_Recommendation_IBCF.csv")
+write.csv(recommend_top_list_UBCF,"Product_Recommendation_UBCF.csv")
+
+recommend_products <- function(rec_list,Product,Cust_ID)
+  
+{
+  rec_product_ids <- rec_list[[Cust_ID]];
+  return(rec_product_ids);
+}
+
+#Function Call
+recommend_products(recommend_top_list_IBCF,Product,1)
+recommend_products(recommend_top_list_UBCF,Product,1)
+
+

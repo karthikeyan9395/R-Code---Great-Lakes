@@ -1,0 +1,241 @@
+# https://github.com/rashnil-git/R-Data-Analysis/blob/master/R/recommender/movie_recommender.R
+# https://www.kaggle.com/hendraherviawan/itembased-collaborative-filter-recommendation-r
+
+library(methods)
+library(recommenderlab)
+library(data.table)
+library(ggplot2)
+library(knitr)
+library(Binarize)
+library(readxl)
+library(dplyr)
+library(caret)
+# library(rio)
+# library(caTools)
+# library(lubridate)
+
+setwd("D:/GreatLakes/Capstone/Retail and marketting analytics/Recommendation System")
+df_data <- read_xlsx("Capstone Dataset.xlsx",sheet = "Transaction")
+attach(df_data)
+df_data_orig <- df_data
+
+df_data <- as.data.table(df_data)
+View(df_data)
+df_data <- df_data[`Customer Type`=="Loyal",]
+df_data_loyal <- df_data
+
+#### start
+df_data <- df_data_loyal
+
+# Date conversion
+#  Assuming all the transaction happened in First day of the month
+df_data_loyal$date <- as.Date(paste("18",df_data_loyal$Month,"01",sep="-"),"%y-%B-%d")
+df_data_loyal <- na.omit(df_data_loyal) #No records removed.
+
+# Create a Item Dictionary itemCode
+class(df_data_loyal)
+df_data_loyal$Brand <- sapply(df_data_loyal$Brand, tolower)
+df_data_loyal$Product <- sapply(df_data_loyal$Product, tolower)
+
+df_data_loyal <- as.data.table(df_data_loyal)
+
+setkeyv(df_data_loyal, c('Product','Brand' ))
+itemCode <- unique(df_data_loyal[, c('Product','Brand')])
+setkeyv(df_data_loyal, NULL)
+View(itemCode)
+
+# Creating a view how many times a customer has purchased a product
+# options(datatable.optimize = 1)
+# str(df_data_loyal)
+df_train_ori <- dcast(df_data_loyal, Cust_ID ~ Product, 
+                      value.var = 'Quantity',
+                      fun.aggregate = sum, 
+                      fill=0)
+
+# just changing the NA fields to 0
+for (i in names(df_train_ori))
+  df_train_ori[is.na(get(i)), (i):=0]
+
+# write.csv(df_train_ori,"Customer behaviour.csv")
+
+# Converting the data to a sparseMatrix
+# i.e) 1000 x 101 rating matrix of class 'binaryRatingMatrix' with 16086 ratings.
+df_train_matrix <- as.matrix(df_train_ori)
+
+# To make sure that the prodcut has been sold atleast 20 times or person bought for atleast 20 times
+# check_times <- df_train_ori[rowSums(df_train_ori[,-1]) >= 20,colSums(df_train_ori[,-1]) >= 20] 
+
+#  The data is changed as 0 and 1
+df_train_binarize <- binarize(as(df_train_matrix, "realRatingMatrix"), minRatin = 1)
+df_train_binarize_view <- (as(df_train,"matrix"))
+View(df_train_binarize_view)
+
+# The below command will tell what are the items that customer has bought
+# If the customer has bought any item it is rated as 1
+# Here am checking for 1 customer product list. If the input is 10 it will show first 10 customer product list
+head(as(df_train_binarize,"list"),1)
+
+# Since I have checked the customer 1 and found he has bought 17 items, am checking the
+# rating for those 17 items. 
+head(as(df_train_binarize,"data.frame"),17)
+
+#normalize ratings to view them in standard normal form
+rating_real_mat <- as(df_train_ori,"realRatingMatrix")
+head(as(rating_real_mat,"data.frame"))
+
+rating_norm <-normalize(rating_real_mat)
+
+image(rating_real_mat,main="Raw Ratings")
+image(rating_norm,main="Normalized Ratings")
+
+###########
+# Not understanding what it is showing. 
+# Just wanted to show graphs, so copied the codes from a website. 
+# Want to understand what it is
+qplot(getRatings(rating_real_mat),
+      binwidth=1,
+      col="green",
+      main="Histogram of Ratings",
+      xlab="Ratings")
+hist(getRatings(rating_real_mat),
+     binwidth=1,
+     col="green",
+     breaks=15,
+     main="Histogram of Ratings",
+     xlab="Ratings");
+
+qplot(getRatings(rating_norm),
+      binwidth=1,
+      main="Histogram of Normalized Ratings",
+      xlab="Ratings")
+
+qplot(rowCounts(rating_real_mat),
+      binwidth=10,
+      main="Movie Average Ratings",
+      xlab="# of users",
+      ylab = " ")
+
+qplot(colMeans(rating_real_mat),
+      binwidth=.1,
+      main="Mean Ratings",
+      xlab="Ratings",
+      ylab = "# of movies")
+
+# Not understanding what it is showing
+###########
+
+
+# Splitting train and test data
+# set.seed(999)
+# which_train <- sample(x = c(TRUE, FALSE), size = nrow(df_train),replace = TRUE, prob = c(0.8, 0.2))
+# test_set <- df_train[which_train == FALSE]
+# training_set <- df_train[which_train == TRUE]
+
+# View(test_set@data@itemsetInfo) # test data Customer ID
+# View(training_set@data@itemsetInfo) # Train data Customer ID
+# test_set_view <- as(test_set,"matrix")
+# training_set_view <- as(training_set,"matrix")
+
+# To get the entries for the recommender lab 
+# <<Not required actually>>
+recommender_models <- recommenderRegistry$get_entries(dataType ="binaryRatingMatrix")
+
+recommender_models$IBCF_binaryRatingMatrix$parameters
+recommender_models$UBCF_binaryRatingMatrix$parameters
+
+# <<Not required actually>>
+
+# Recommendation Algorithm on trainning data
+# learn from here
+method <- 'IBCF' #Item Based Collaborative Filtering 
+parameter <- list(method = 'Jaccard')
+parameter_1 = list(normalize="Z-score",
+                 method="Cosine",
+                 nn=5,
+                 minRating=1)
+n_recommended <- 5
+
+recc_model <- Recommender(data = df_train_binarize, 
+                          method = 'IBCF', 
+                          parameter = 'Jaccard')
+
+recc_model1 <- Recommender(data = df_train, 
+                          method = 'UBCF', 
+                          parameter = list(normalize="Z-score",
+                                      method="Jaccard",
+                                      nn=25,
+                                      minRating=1))
+
+print(recc_model)
+# Recommender of type 'IBCF' for 'binaryRatingMatrix' 
+# learned using 801 users.
+
+print(recc_model_1)
+# Recommender of type 'UBCF' for 'binaryRatingMatrix' 
+# learned using 801 users.
+
+# Understanding the model
+recc_model_view <- (as(recc_model@model$sim,"matrix"))
+View(recc_model_view)
+
+names(getModel(recc_model))
+model_details <- getModel(recc_model) #Full details
+
+actual_prod_keyvalues <- rownames(recc_model@model$sim)
+# write.csv(actual_prod_keyvalues,"Product Key Values.csv")
+
+
+# Prediction
+recc_model_predicted <-predict(object = recc_model,
+                               newdata=df_train,
+                               n = n_recommended, 
+                               type="topNList")
+
+recc_model_predicted_1 <-predict(object = recc_model1,
+                               newdata=df_train,
+                               n = n_recommended, 
+                               type="topNList")
+
+recc_model_predicted_view <- (as(recc_model_predicted,"list"))
+recc_model_predicted_1_view <- (as(recc_model_predicted_1,"list"))
+
+as(recc_model_predicted,"list")[1:3]
+names(as(recc_model_predicted,"list"))
+
+recommend_top_list <-as(recc_model_predicted,"list")
+View(recommend_top_list)
+
+write.csv(recc_model_predicted_view,"Product_Recommendation.csv")
+write.csv(recc_model_predicted_1_view,"Product_Recommendation_UBCF.csv")
+ 
+recommend_products <- function(rec_list,Product,Cust_ID)
+  
+{
+  rec_product_ids <- rec_list[[Cust_ID]];
+  return(rec_product_ids);
+}
+
+#Function Call
+recommend_products(recommend_top_list,Product,1)
+
+# Code Completed. But take out the testing part.
+#####################################################################################
+
+Cust_ID <-  df_train_ori[,1] 
+user_1 <- as.integer(names(recc_model_predicted@items[1]))
+
+products_keyvalues <- recc_model_predicted@items[[1]]
+rec_products <- rownames(model_details$sim)[products_keyvalues]
+
+# Compaire to actual purchase
+user_1_buy <- df_data[,] 
+user_1_buy <- as.data.frame(user_1_buy)
+a <- user_1_buy %>%
+      select(Cust_ID,Brand,Product,Quantity) %>%
+      filter(df_data$Cust_ID == 1) %>%
+        group_by(Product) %>% 
+        summarise(Quantity = sum(Quantity)) %>%
+        arrange(desc(Quantity))
+
+merge(itemCode,user_1_buy, by='Product')
+

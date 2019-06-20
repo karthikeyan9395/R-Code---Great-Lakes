@@ -1,0 +1,84 @@
+# install.packages("stringr")
+library(stringr)
+library(dplyr)
+# library(tidyverse)
+setwd("C:/Users/563525/Desktop/Power BI/R script")
+library(readxl)
+inc <-read_xlsx("Applications.xlsx",sheet = "Sheet1")
+# inc <- read_xlsx(file.choose(),sheet = "Sheet1")
+apps <- read_xlsx("US Applications.xlsx")
+View(inc)
+# colnames(inc)
+# data <- inc[,c("Number","Description","Summary","Configuration Item")] 
+attach(inc)
+attach(apps)
+names(inc)[names(inc) == "Configuration Item"] <- "Configuration_Item"
+
+
+inc$app <- c("")
+
+for(i in 1:nrow(inc))
+  {
+      flag = 0
+      temp <- inc$Configuration_Item[i]
+     for (row in 1:nrow(apps))
+      {
+          a <- str_detect(temp, Words[row])
+
+              if ("TRUE" %in% a)
+                {
+                  inc$app[i] <- apps[row,"Applications"]
+                  flag = 1
+                }
+              if(flag == 1)
+                {
+                  break
+                }
+       
+              if("FALSE" %in% a && flag != 1)
+                {
+                    inc$app[i] <- c("Unknown")
+                }
+
+      }
+    if("FALSE" %in% a && row == nrow(apps))
+    {
+
+        flag = 0
+        temp <- inc$Summary[i]
+        for (row in 1:nrow(apps))
+        {
+          a <- str_detect(temp, Words[row])
+          
+          if ("TRUE" %in% a)
+          {
+            inc$app[i] <- apps[row,"Applications"]
+            flag = 1
+          }
+          if(flag == 1)
+          {
+            break
+          }
+          
+          if("FALSE" %in% a && flag != 1)
+          {
+            inc$app[i] <- c("Unknown")
+          }
+          
+        }
+      if("FALSE" %in% a && row == nrow(apps))
+      {
+        inc$app[i] <- c("Unknown")
+      }
+    }
+  }
+  
+
+View(inc[,c("Number","Description","Summary","Configuration_Item","app")])
+
+unknwn <- subset(inc,inc$app == "Unknown")
+inc$app <- as.character(inc$app)
+unknwn$app <- as.character((unknwn$app))
+write.csv(inc,file="Applications_Updated.csv")
+write.csv(unknwn,file = "Unknown Applications.csv")
+

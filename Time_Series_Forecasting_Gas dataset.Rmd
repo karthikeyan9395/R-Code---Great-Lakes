@@ -1,0 +1,153 @@
+---
+title: "Time_series forecasting on Australian monthly gas production"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Here we are going to predict the gas production for next 12 periods.
+
+# Libraries
+```{r}
+library(tseries)
+library(forecast)
+library(ggplot2)
+```
+
+Checking the gas production data
+```{r}
+data("gas")
+gas
+```
+
+```{r}
+
+autoplot(gas) + labs(x = "Year", y = "Gas Production", title = "Australian monthly gas production from 1956 to 1995")
+```
+The data is not stationary. It has Level, Seasonal and Trend parameters in it.
+
+```{r}
+boxplot(gas ~ cycle(gas), xlab = "Year", ylab = "Gas Production", main = "Australian monthly gas production from 1956 to 1995", col = "gold")
+```
+From Boxplot it looks like the production of gas is higher in July month.
+
+```{r}
+seasonplot(gas)
+```
+
+
+
+# Making the data stationary
+```{r}
+plot(diff(log(gas)))
+abline(h = 0)
+kpss.test(diff(log(gas)))
+```
+
+Since the `p-value is 0.1` the data is stationary with first difference. Hence `d = 1`
+
+# Determing p and q values for ARIMA model
+```{r}
+pacf(diff(log(gas))) # p = 9
+```
+
+```{r}
+acf(diff(log(gas))) # q = 2  
+```
+
+## ARIMA
+Running ARIMA model in full data.
+
+```{r}
+arima_gas <- auto.arima(gas)
+arima_gas
+pred <- predict(arima_gas,n.ahead = 12*1)
+
+pred
+```
+
+```{r}
+forecast_gas <- forecast(arima_gas, h = 12*1)
+plot(forecast_gas)
+```
+
+```{r}
+accuracy(forecast_gas) # MAPE - 3.9
+shapiro.test(arima_gas$residuals)
+Box.test(arima_gas$residuals,type = "Ljung-Box")
+```
+
+Trying out smoothening model
+
+## 1. SES
+```{r}
+model_gas_ses <- HoltWinters(gas,beta = FALSE, gamma = FALSE)
+plot(model_gas_ses)
+model_gas_ses #alpha = 0.99
+```
+
+```{r}
+SES_forecast <- forecast(model_gas_ses,12)
+plot(SES_forecast)
+accuracy(SES_forecast) #MAPE - 8.22
+```
+
+## 2. Holt Trend
+```{r}
+model_gas_trend <- HoltWinters(gas,gamma = FALSE)
+plot(model_gas_trend)
+```
+
+```{r}
+Trend_forecast <- forecast(model_gas_trend,12)
+plot(Trend_forecast)
+accuracy(Trend_forecast) # MAPE - 8.15
+```
+
+## 3. Holt Seasonal
+```{r}
+model_gas_Seasonal <- HoltWinters(gas)
+plot(model_gas_Seasonal)
+```
+
+```{r}
+Seasonal_forecast <- forecast(model_gas_Seasonal,12)
+plot(Seasonal_forecast)
+accuracy(Seasonal_forecast) #MAPE - 4.29
+```
+
+Since the `alpha is 0.99` we are taking recent data for ARIMA model
+Choosing data from 1991 to 1995 
+
+```{r}
+gas_recent <- ts(gas[421:476],start = c(1991,1) , end = c(1995,8), frequency = 12)
+plot(diff(log(gas_recent)))
+kpss.test(diff(gas_recent))
+```
+
+```{r}
+pacf(diff(log(gas_recent))) #1
+acf(diff(log(gas_recent))) #2
+#  d = 1
+```
+
+## ARIMA model on 1991 to 1995 year data
+```{r}
+model_gasrecent_arima <- arima(log(gas_recent),c(1,1,2),seasonal = list(order = c(1,1,2),period = 12))
+# arima_gas_recent <- auto.arima(gas_recent)
+model_gasrecent_arima
+pred <- predict(model_gasrecent_arima,n.ahead = 12)
+pred1 <- (2.718)^pred$pred
+pred1
+```
+
+```{r}
+forecast_gas <- forecast(model_gasrecent_arima, h = 12*1)
+plot(forecast_gas)
+```
+
+```{r}
+accuracy(forecast_gas) # MAPE - 0.24
+shapiro.test(model_gasrecent_arima$residuals)
+Box.test(model_gasrecent_arima$residuals,type = "Ljung-Box")
+```
